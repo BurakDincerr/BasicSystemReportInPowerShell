@@ -1,0 +1,94 @@
+<# 4/6/2023 Burak Dincer 
+Generates Basic report of system in htmlFormat. that contains most error log messages in application,system; free space in drives, top memory consumption process, 
+
+#>
+param(
+ [Parameter(Position=0,mandatory=$true)]
+[string]$path 
+)
+
+$LogData = Get-EventLog system -EntryType Error -Newest 100 |
+    Select-Object message, source, count |
+    Group-Object -Property message -NoElement |
+    Sort-Object Count -Descending |
+    Select-Object Name, @{Name="Source"; Expression={$_.Group.source}}, Count
+
+
+
+    $ALogData = Get-EventLog Application -EntryType Error -Newest 25 |
+    Select-Object message, source, count |
+    Group-Object -Property message -NoElement |
+    Sort-Object Count -Descending |
+    Select-Object Name, @{Name="Source"; Expression={$_.Group.source}}, Count
+
+
+$FreeSpace = get-wmiobject win32_logicaldisk | 
+select Name,FileSystem,VolumeName,@{n="FreeSpaceInGB";e={[math]::truncate($_.freespace / 1GB)}}
+
+
+$Processes = Get-WmiObject WIN32_PROCESS | 
+    Sort-Object -Property ws -Descending |
+    Select-Object -first 15 processname, @{Name="MemUsage(MB)";Expression={[math]::round($_.ws / 1mb)}}
+
+
+
+$html = "<html><head><style>"
+$html += "table { border-collapse: collapse; width: 100%; }"
+$html += "th, td { text-align: left; padding: 8px; }"
+$html += "th { background-color: #4CAF50; color: white; }"
+$html += "tr:nth-child(even) { background-color: #f2f2f2; }"
+$html += "</style></head><body>"
+$html += "<table><tr><th>System Error Messages</th><th>Source</th><th>Count</th></tr>"
+
+foreach ($entry in $LogData) {
+    $message = $entry.Name
+    $source = $entry.Source
+    $count = $entry.Count
+
+    $html += "<tr><td>$message</td><td>$source</td><td>$count</td></tr>"
+}
+
+
+$html += "<table><tr><th>Application Error Messages</th><th>Source</th><th>Count</th></tr>"
+
+foreach ($entry in $ALogData) {
+    $message = $entry.Name
+    $source = $entry.Source
+    $count = $entry.Count
+
+    $html += "<tr><td>$message</td><td>$source</td><td>$count</td></tr>"
+}
+
+$html += "&nbsp;&nbsp"
+
+
+
+$html += "&nbsp;&nbsp"
+$html += "&nbsp;&nbsp;<table><tr><th>Drive</th><th>FileSystem</th><th>VolumeName</th><th>FreeSpaceInGB</th></tr>"
+foreach ($data in $FreeSpace) {
+    $Name = $data.Name
+    $FileSystem = $data.FileSystem
+    $VolumeName = $data.VolumeName
+    $FreeSpaceInGB = $data.FreeSpaceInGB
+
+    $html += "<tr><td>$Name</td><td>$FileSystem</td><td>$VolumeName</td><td>$FreeSpaceInGB</td></tr>"
+}
+
+$html += "&nbsp;&nbsp"
+
+$html += "&nbsp;&nbsp;<table><tr><th>ProcessName</th><th>Mem Usage(MB)</th></tr>"
+foreach ($process1 in $Processes) {
+    $PName = $process1.ProcessName
+    $MemUsage = $process1."MemUsage(MB)"
+    
+
+    $html += "<tr><td>$PName</td><td>$MemUsage</td></tr>"
+}
+
+
+
+$html += "</table></body></html>"
+
+$html | Out-File -FilePath $path 
+
+

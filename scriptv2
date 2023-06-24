@@ -1,0 +1,105 @@
+
+
+$LogData = Get-EventLog system -EntryType Error -Newest 100 |
+    Select-Object message, source, count |
+    Group-Object -Property message -NoElement |
+    Sort-Object Count -Descending |
+    Select-Object Name, @{Name="Source"; Expression={$_.Group.source}}, Count
+
+
+$FreeSpace = get-wmiobject win32_logicaldisk | 
+    select Name,FileSystem,VolumeName,@{n="FreeSpaceInGB";e={[math]::truncate($_.freespace / 1GB)}}
+
+
+$Processes = Get-WmiObject WIN32_PROCESS | 
+    Sort-Object -Property ws -Descending |
+    Select-Object -first 15 processname, @{Name="MemUsage(MB)";Expression={[math]::round($_.ws / 1mb)}}
+
+
+
+$lastBoot =  (Get-CimInstance -ClassName CIM_OperatingSystem).LastBootUpTime
+$curDate = (Get-Date)
+$uptime = $curDate - $lastBoot
+
+
+$curOpenConns =  Get-NetTCPConnection | select Local*, Remote*, State,`
+@{n="ProcessName";e={(Get-Process -Id $_.OwningProcess).ProcessName}},`
+@{n="ProcessPath";e={(Get-Process -Id $_.OwningProcess).Path}},
+@{n="ProcessID";e={(Get-Process -Id $_.OwningProcess).id}} 
+
+
+
+
+$html = "<html><head><style>"
+$html += "table { border-collapse: collapse; width: 100%; }"
+$html += "th, td { text-align: left; padding: 8px; }"
+$html += "th { background-color: #4CAF50; color: white; }"
+$html += "tr:nth-child(even) { background-color: #f2f2f2; }"
+$html += "</style></head><body>"
+$html += "<table><tr><th>Message</th><th>Source</th><th>Count</th></tr>"
+
+foreach ($entry in $LogData) {
+    $message = $entry.Name
+     $source = $entry.Source
+      $count = $entry.Count
+
+    $html += "<tr><td>$message</td><td>$source</td><td>$count</td></tr>"
+}
+
+$html += "&nbsp;&nbsp"
+$html += "&nbsp;&nbsp;<table><tr><th>Drive</th><th>FileSystem</th><th>VolumeName</th><th>FreeSpaceInGB</th></tr>"
+foreach ($data in $FreeSpace) {
+    $Name = $data.Name
+        $FileSystem = $data.FileSystem
+           $VolumeName = $data.VolumeName
+               $FreeSpaceInGB = $data.FreeSpaceInGB
+
+    $html += "<tr><td>$Name</td><td>$FileSystem</td><td>$VolumeName</td><td>$FreeSpaceInGB</td></tr>"
+}
+
+$html += "&nbsp;&nbsp"
+
+$html += "&nbsp;&nbsp;<table><tr><th>ProcessName</th><th>Mem Usage(MB)</th></tr>"
+foreach ($process1 in $Processes) {
+    $PName = $process1.ProcessName
+        $MemUsage = $process1."MemUsage(MB)"
+    
+
+    $html += "<tr><td>$PName</td><td>$MemUsage</td></tr>"
+}
+
+
+
+$html += "<table><tr><th>LocalAddress</th><th>LocalPort</th><th>RemoteAddress</th><th>RemotePort</th><th>State</th><th>ProcessName</th><th>ProcessPath</th><th>ProcessID</th></tr>"
+foreach ($openconn in $curOpenConns) {
+    $LocalAddress = $openconn.LocalAddress
+     $LocalPort = $openconn.LocalPort
+      $RemoteAddress = $openconn.RemoteAddress
+       $RemotePort = $openconn.RemotePort
+        $State = $openconn.State
+         $ProcessName = $openconn.ProcessName
+          $ProcessPath = $openconn.ProcessPath
+           $ProcessID = $openconn.ProcessID
+    
+    
+
+    $html += "<tr><td>$LocalAddress</td><td>$LocalPort</td><td>$RemoteAddress</td><td>$RemotePort</td><td>$State</td><td>$ProcessName</td><td>$ProcessPath</td><td>$ProcessID</td></tr>"
+}
+
+
+
+
+
+
+
+
+
+$html += "</table>
+<h5  style=color:#4CAF50;>Since last reboot $($uptime.Days) day,  $($uptime.Hours) Hour;  $($uptime.Minutes) Minutes... </h5>
+<h5  style=color:#4CAF50;>Report Time  $(Get-Date) ....</h5>
+</body></html>"
+
+$html | Out-File -FilePath "C:\Users\DINCERR\Desktop\yeni.html"
+
+
+

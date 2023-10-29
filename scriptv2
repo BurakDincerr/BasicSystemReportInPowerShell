@@ -99,7 +99,7 @@ $html += "</table>
 <h5  style=color:#4CAF50;>Report Time  $(Get-Date) ....</h5>
 </body></html>"
 
-$html | Out-File -FilePath "C:\Users\DINCERR\Desktop\yeni.html"
+$html | Out-File -FilePath "  " #path
 
 
 
